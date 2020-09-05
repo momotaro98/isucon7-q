@@ -499,9 +499,12 @@ func getMessage(c echo.Context) error {
 	//	users = append(users, m.UserID)
 	//}
 
-	users, err := getUsersIn(db, messages)
-	if err != nil {
-		return err
+	users := make(map[int64]User)
+	if len(messages) > 0 {
+		users, err = getUsersIn(db, messages)
+		if err != nil {
+			return err
+		}
 	}
 
 	// ikeda ボツ
