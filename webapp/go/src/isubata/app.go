@@ -15,6 +15,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -44,6 +45,47 @@ type Renderer struct {
 func (r *Renderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
 	return r.templates.ExecuteTemplate(w, name, data)
 }
+
+type Channel struct {
+	ChannelID int64 `db:"id"`
+}
+
+type ChannelIDCount struct {
+	ChannelID int64 `db:"id"`
+	Count     int64 `db:"cnt"`
+}
+
+func GetChannelIDCount() (map[int64]int64, error) {
+	ret := make(map[int64]int64)
+
+	dest := []Channel{}
+	err := db.Select(&dest, "select id from channel")
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range dest {
+		ret[d.ChannelID] = 0
+	}
+
+	dest2 := []ChannelIDCount{}
+	err = db.Select(&dest2, "select channel_id as id, count(*) as cnt from message group by channel_id")
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range dest2 {
+		ret[d.ChannelID] = d.Count
+	}
+	return ret, err
+}
+
+type ChannelMessageCount struct {
+	CountMap map[int64]int64 // channel_id and its total message count
+	sync.RWMutex
+}
+
+var (
+	CMC ChannelMessageCount
+)
 
 func init() {
 	seedBuf := make([]byte, 8)
@@ -83,6 +125,15 @@ func init() {
 
 	db.SetMaxOpenConns(20)
 	db.SetConnMaxLifetime(5 * time.Minute)
+
+	if c, err := GetChannelIDCount(); err != nil {
+		panic(err)
+	} else {
+		CMC.CountMap = c
+	}
+
+	log.Println("my log. CMD.CountMap:", CMC.CountMap)
+
 	log.Printf("Succeeded to connect db.")
 }
 
@@ -114,6 +165,9 @@ func addMessage(channelID, userID int64, content string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	CMC.Lock()
+	defer CMC.Unlock()
+	CMC.CountMap[channelID]++
 	return res.LastInsertId()
 }
 
@@ -481,20 +535,20 @@ func getMessage(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-type ChanCount struct {
-	ChannelID int64 `db:"channel_id"`
-	Count     int64 `db:"cnt"`
-}
+//type ChanCount struct {
+//	ChannelID int64 `db:"channel_id"`
+//	Count     int64 `db:"cnt"`
+//}
 
-func queryChannels() (map[int64]int64, error) {
-	chanCounts := []ChanCount{}
-	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
-	ret := make(map[int64]int64)
-	for _, c := range chanCounts {
-		ret[c.ChannelID] = c.Count
-	}
-	return ret, err
-}
+//func queryChannels() (map[int64]int64, error) {
+//	chanCounts := []ChanCount{}
+//	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
+//	ret := make(map[int64]int64)
+//	for _, c := range chanCounts {
+//		ret[c.ChannelID] = c.Count
+//	}
+//	return ret, err
+//}
 
 func queryHaveRead(userID, chID int64) (int64, error) {
 	type HaveRead struct {
@@ -541,11 +595,14 @@ func fetchUnread(c echo.Context) error {
 
 	// time.Sleep(time.Second)
 
-	channels, err := queryChannels()
-	if err != nil {
-		return err
-	}
-	log.Println("after queryChannels", channels)
+	CMC.Lock()
+	cmcMap := CMC.CountMap
+	CMC.Unlock()
+	//channels, err := queryChannels()
+	//if err != nil {
+	//	return err
+	//}
+	//log.Println("CountMap", cmcMap)
 
 	userUnreadMap, err := queryChanMessages(userID)
 	if err != nil {
@@ -555,7 +612,7 @@ func fetchUnread(c echo.Context) error {
 
 	resp := []map[string]interface{}{}
 
-	for chID, count := range channels {
+	for chID, count := range cmcMap {
 		//lastID, err := queryHaveRead(userID, chID)
 		//if err != nil {
 		//	return err
@@ -576,11 +633,7 @@ func fetchUnread(c echo.Context) error {
 			//err = db.Get(&cnt,
 			//	"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
 			//	chID)
-			if count == 1 {
-				cnt = 0
-			} else {
-				cnt = count
-			}
+			cnt = count
 		}
 		if err != nil {
 			return err
@@ -618,10 +671,19 @@ func getHistory(c echo.Context) error {
 
 	const N = 20
 	var cnt int64
-	err = db.Get(&cnt, "SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?", chID)
-	if err != nil {
-		return err
+
+	CMC.Lock()
+	cnt, ok := CMC.CountMap[chID]
+	if !ok {
+		CMC.Unlock()
+		return fmt.Errorf("my error!! no map id in getHistory")
 	}
+	CMC.Unlock()
+	//err = db.Get(&cnt, "SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?", chID)
+	//if err != nil {
+	//	return err
+	//}
+
 	maxPage := int64(cnt+N-1) / N
 	if maxPage == 0 {
 		maxPage = 1
@@ -732,6 +794,11 @@ func postAddChannel(c echo.Context) error {
 		return err
 	}
 	lastID, _ := res.LastInsertId()
+
+	CMC.Lock()
+	defer CMC.Unlock()
+	CMC.CountMap[lastID] = 0
+
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/channel/%v", lastID))
 }
