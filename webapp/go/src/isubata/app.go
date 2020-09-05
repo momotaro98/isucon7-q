@@ -608,9 +608,11 @@ func fetchUnread(c echo.Context) error {
 		return err
 	}
 
-	log.Println("cmcChannels:", cmcChannels[1], "channels:", channels[1])
-	log.Println("cmcChannels:", cmcChannels[2], "channels:", channels[2])
-	log.Println("cmcChannels:", cmcChannels[3], "channels:", channels[3])
+	for key, val := range cmcChannels {
+		if val != channels[key] {
+			fmt.Println("key:", "cmc val:", val, "channels val:", channels[key])
+		}
+	}
 
 	userUnreadMap, err := queryChanMessages(userID)
 	if err != nil {
