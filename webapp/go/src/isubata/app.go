@@ -600,20 +600,22 @@ func fetchUnread(c echo.Context) error {
 	// time.Sleep(time.Second)
 
 	CMC.Lock()
-	cmcChannels := CMC.CountMap
+	//cmcChannels := CMC.CountMap
+	channels := CMC.CountMap
 	CMC.Unlock()
 
-	channels, err := GetChannelIDCount()
+	//channels, err := GetChannelIDCount()
 	//channels, err := queryChannels()
-	if err != nil {
-		return err
-	}
+	//if err != nil {
+	//	return err
+	//}
 
-	for key, val := range cmcChannels {
-		if val != channels[key] {
-			fmt.Println("key:", key, "cmc val:", val, "channels val:", channels[key])
-		}
-	}
+	// Debugging
+	//for key, val := range cmcChannels {
+	//	if val != channels[key] {
+	//		fmt.Println("key:", key, "cmc val:", val, "channels val:", channels[key])
+	//	}
+	//}
 
 	userUnreadMap, err := queryChanMessages(userID)
 	if err != nil {
