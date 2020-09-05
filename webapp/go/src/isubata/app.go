@@ -132,6 +132,30 @@ func queryMessages(chanID, lastID int64) ([]Message, error) {
 	return msgs, err
 }
 
+type MessageWithUser struct {
+	MessageID   int64     `db:"message_id"`
+	CreatedAt   time.Time `db:"created_at"`
+	Content     string    `db:"content"`
+	Name        string    `db:"name"`
+	DisplayName string    `db:"display_name"`
+	AvatarIcon  string    `db:"avatar_icon"`
+}
+
+func queryMessagesWithMessage(chanID, lastID int64) ([]MessageWithUser, error) {
+	msgs := []MessageWithUser{}
+	err := db.Select(&msgs, `
+select m.id as message_id, m.created_at, m.content, u.name, u.display_name, u.avatar_icon
+from message as m inner join user as u on m.user_id = u.id
+where m.id > ? AND m.channel_id = ? ORDER BY m.id DESC LIMIT 100`,
+		lastID, chanID)
+	if err != nil {
+		return nil, err
+	}
+
+	return msgs, nil
+
+}
+
 func sessUserID(c echo.Context) int64 {
 	sess, _ := session.Get("session", c)
 	var userID int64
@@ -384,18 +408,39 @@ func getMessage(c echo.Context) error {
 		return err
 	}
 
-	messages, err := queryMessages(chanID, lastID)
+	//messages, err := queryMessages(chanID, lastID)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//response := make([]map[string]interface{}, 0)
+	//for i := len(messages) - 1; i >= 0; i-- {
+	//	m := messages[i]
+	//	r, err := jsonifyMessage(m)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	response = append(response, r)
+	//}
+
+	messages, err := queryMessagesWithMessage(chanID, lastID)
 	if err != nil {
 		return err
 	}
 
 	response := make([]map[string]interface{}, 0)
-	for i := len(messages) - 1; i >= 0; i-- {
-		m := messages[i]
-		r, err := jsonifyMessage(m)
-		if err != nil {
-			return err
+
+	for _, m := range messages {
+		r := make(map[string]interface{})
+		r["id"] = m.MessageID
+		r["user"] = User{
+			Name:        m.Name,
+			DisplayName: m.DisplayName,
+			AvatarIcon:  m.AvatarIcon,
 		}
+		r["date"] = m.CreatedAt.Format("2006/01/02 15:04:05")
+		r["content"] = m.Content
+
 		response = append(response, r)
 	}
 
@@ -403,7 +448,7 @@ func getMessage(c echo.Context) error {
 		_, err := db.Exec("INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)"+
 			" VALUES (?, ?, ?, NOW(), NOW())"+
 			" ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()",
-			userID, chanID, messages[0].ID, messages[0].ID)
+			userID, chanID, messages[0].MessageID, messages[0].MessageID)
 		if err != nil {
 			return err
 		}
