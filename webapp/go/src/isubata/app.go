@@ -400,7 +400,7 @@ func getUsersIn(q sqlx.Queryer, messages []Message) (userSimples map[int64]User,
 	}
 
 	userSimples = make(map[int64]User)
-	inQuery, inArgs, err := sqlx.In("SELECT id, name, display_name, avatar_icon FROM `users` WHERE `id` IN (?)", userIDs)
+	inQuery, inArgs, err := sqlx.In("SELECT id, name, display_name, avatar_icon FROM `user` WHERE `id` IN (?)", userIDs)
 	if err != nil {
 		return nil, err
 	}
