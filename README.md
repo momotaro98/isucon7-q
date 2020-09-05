@@ -1,165 +1,165 @@
-ISUCON7 予選問題
-====
+# notify_slack
 
-[予選マニュアル](https://gist.github.com/941/8c64842b71995a2d448315e2594f62c2)
+Notify slack from the command line. It receives standard input and notifies Slack all at once every second (can be changed with the `-interval` option).
 
-## 感想戦用、1VMでの動かし方
+Please watch this video. https://www.youtube.com/watch?v=wmKSr9Aoz-Y
 
-### ディレクトリ構成
-
-```sh
-db      - データベーススキーマ等
-bench   - ベンチマーカー、初期データ生成器
-webapp  - 各種言語実装
-files   - 各種設定ファイル
-```
-
-### 環境構築
-
-Ubuntu 16.04 のものをなるべくデフォルトで使います。
-
-まずは `isucon` ユーザーを作り、そのホームディレクトリ配下の `isubata` ディレクトリに
-リポジトリをチェックアウトします。
-
-```console
-$ sudo apt install git
-$ git clone https://github.com/isucon/isucon7-qualify.git isubata
-```
-
-nginx と MySQL は Ubuntu の標準のものを使います。
+## Installation
 
 ```
-$ sudo apt install mysql-server nginx
+GO111MODULE=on go get github.com/catatsuy/notify_slack/cmd/notify_slack
 ```
 
-各言語は xbuild で最新安定版をインストールします。まず xbuild が必要とするライブラリをインストールします。
+Or you download from [Releases](https://github.com/catatsuy/notify_slack/releases).
+
+If you want to develop, please use the `make`. This software requires Go 1.13 or higher.
 
 ```
-$ sudo apt install -y git curl libreadline-dev pkg-config autoconf automake build-essential libmysqlclient-dev \
-	libssl-dev python3 python3-dev python3-venv openjdk-8-jdk-headless libxml2-dev libcurl4-openssl-dev \
-        libxslt1-dev re2c bison libbz2-dev libreadline-dev libssl-dev gettext libgettextpo-dev libicu-dev \
-	libmhash-dev libmcrypt-dev libgd-dev libtidy-dev
-```
-
-xbuildで言語をインストールします。ベンチマーカーのために、Goは必ずインストールしてください。
-他の言語は使わないのであればスキップしても問題ないと思います。
-
-```
-cd
-git clone https://github.com/tagomoris/xbuild.git
-
-mkdir local
-xbuild/ruby-install   -f 2.4.2   /home/isucon/local/ruby
-xbuild/perl-install   -f 5.26.1  /home/isucon/local/perl
-xbuild/node-install   -f v6.11.4 /home/isucon/local/node
-xbuild/go-install     -f 1.9     /home/isucon/local/go
-xbuild/python-install -f 3.6.2   /home/isucon/local/python
-xbuild/php-install    -f 7.1.9   /home/isucon/local/php -- --disable-phar --with-pcre-regex --with-zlib --enable-fpm --enable-pdo --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-openssl --with-pcre-regex --with-pcre-dir --with-libxml-dir --enable-opcache --enable-bcmath --with-bz2 --enable-calendar --enable-cli --enable-shmop --enable-sysvsem --enable-sysvshm --enable-sysvmsg --enable-mbregex --enable-mbstring --with-mcrypt --enable-pcntl --enable-sockets --with-curl --enable-zip --with-pearAA
-```
-
-### ベンチマーカーの準備
-
-Goを使うのでこれだけは最初に環境変数を設定しておく
-
-```
-export PATH=$HOME/local/go/bin:$HOME/go/bin:$PATH
-```
-
-ビルド
-
-```sh
-go get github.com/constabulary/gb/...   # 初回のみ
-cd ~/isubata/bench
-gb vendor restore
 make
 ```
 
-初期データ生成
+## usage
+
+`./bin/notify_slack` posts to Slack. You specify the setting in command line option or toml setting file.
+If both settings are specified, command line option will always take precedence.
 
 ```sh
-cd ~/isubata/bench
-./bin/gen-initial-dataset   #isucon7q-initial-dataset.sql.gz ができる
+./bin/output | ./bin/notify_slack
 ```
 
-### データベース初期化
+`./bin/output` is used for testing. While buffering, to post to slack.
 
-データベース初期化、アプリが動くのに最低限必要なデータ投入
-
-```sh
-$ sudo ./db/init.sh
-$ sudo mysql
-mysql> CREATE USER isucon@'%' IDENTIFIED BY 'isucon';
-mysql> GRANT ALL on *.* TO isucon@'%';
-mysql> CREATE USER isucon@'localhost' IDENTIFIED BY 'isucon';
-mysql> GRANT ALL on *.* TO isucon@'localhost';
+``` sh
+./bin/notify_slack README.md
 ```
 
-初期データ投入
+You post the file as a snippet. `token` and `channel` is required to use the Slack Web API.
 
-```sh
-zcat ~/isubata/bench/isucon7q-initial-dataset.sql.gz | sudo mysql isubata
+If you want to upload to snippet via standard input, you must specify `-snippet`. If you specify `filename`, you can change the file name on Slack.
+
+``` sh
+git diff | ./bin/notify_slack -snippet -filename git.diff
 ```
 
-デフォルトだとTCPが127.0.0.1しかbindしてないので、複数台構成に対応するには
-`/etc/mysql/mysql.conf.d/mysqld.cnf` で `bind-address = 127.0.0.1` になっている
-場所を `bind-address = 0.0.0.0` に書き換える。
+Slack's API can specify `filetype`. You can also specify `-filetype`. But it is automatically determined from the extension of the file.
+You make sure to give the appropriate extension.
+
+[file type | Slack](https://api.slack.com/types/file#file_types)
 
 
-### nginx
-
-```sh
-$ sudo cp ~/isubata/files/app/nginx.* /etc/nginx/sites-available
-$ cd /etc/nginx/sites-enabled
-$ sudo unlink default
-$ sudo ln -s ../sites-available/nginx.conf  # php の場合は nginx.php.conf
-$ sudo systemctl restart nginx
-```
-
-
-### 参考実装(python)を動かす
-
-初回のみ
-
-```console
-$ cd ~/isubata/webapp/python
-$ ./setup.sh
-```
-
-起動
-
-```sh
-export ISUBATA_DB_HOST=127.0.0.1
-export ISUBATA_DB_USER=isucon
-export ISUBATA_DB_PASSWORD=isucon
-./venv/bin/gunicorn --workers=10 -b '127.0.0.1:5000' app:app
-```
-
-予選本番では、 `/etc/hosts` に各ホスト名を書いて、環境変数は systemd から `env.sh` ファイルを読み込んでいました。
-この辺は適当に使いやすいように設定してください。
-
-
-### ベンチマーク実行
-
-```console
-$ cd bench
-$ ./bin/bench -h # ヘルプ確認
-$ ./bin/bench -remotes=127.0.0.1 -output result.json
-```
-
-結果を見るには `sudo apt install jq` で jq をインストールしてから、
+### CLI options
 
 ```
-$ jq . < result.json
+-c string
+      config file name
+-channel string
+      specify channel (unavailable for new Incoming Webhooks)
+-filename string
+      specify a file name (for uploading to snippet)
+-filetype string
+      specify a filetype (for uploading to snippet)
+-icon-emoji string
+      specify icon emoji (unavailable for new Incoming Webhooks)
+-interval duration
+      interval (default 1s)
+-slack-url string
+      slack url (Incoming Webhooks URL)
+-snippet
+      switch to snippet uploading mode
+-token string
+      token (for uploading to snippet)
+-username string
+      specify username (unavailable for new Incoming Webhooks)
+-version
+      Print version information and quit
 ```
 
-### 備考
+### toml configuration file
 
-systemd に置く設定ファイルなどは files/ ディレクトリから探してください。
+By default check the following files.
+
+1. a file specified with `-c`
+1. `$HOME/.notify_slack.toml`
+1. `$HOME/etc/notify_slack.toml`
+1. `/etc/notify_slack.toml`
+
+The contents of the toml file are as follows.
+
+```toml:notify_slack.toml
+[slack]
+url = "https://hooks.slack.com/services/**"
+token = "xoxp-xxxxx"
+channel = "#general"
+username = "tester"
+icon_emoji = ":rocket:"
+interval = "1s"
+```
+
+Note:
+
+  * `url` is necessary if you want to post to slack as text.
+    * You can specify `channel`, `username`, `icon_emoji` and `interval`.
+    * Now, you cannot override `channel`, `username`, `icon_emoji` due to the specification change of Incoming Webhooks. Please refer to https://api.slack.com/messaging/webhooks#advanced_message_formatting
+    * Incoming Webhooks url can be created on https://slack.com/services/new/incoming-webhook
+  * `token` and `channel` is necessary if you want to post to snippet.
+    * `username` and `icon_emoji` are ignored in this case.
+    * Please see the next section for how to create token.
+
+Tips:
+
+  * If you want to default to another channel only for snippet, you can use `snippet_channel`.
+
+### How to create a token
+
+You need to create a token if you use snippet uploading mode.
+
+#### Create New App
+
+At first, you need to create new app. Please access https://api.slack.com/apps.
+
+1. click `Create New App`
+2. input application name to `App Name`
+3. select your workspace on `Development Slack Workspace`
+4. click `Create App`
+
+#### Basic Information
+
+1. click `Permissions` on `Add features and functionality`
+2. select `files:write:user` on `Scopes` and click `Save Changes`. You are able to choose `Bot Token Scopes` or `User Token Scopes`
+
+#### OAuth & Permissions
+
+1. click `Install App to Workspace`
+2. install your app
+3. copy `OAuth Access Token` beginning with `xoxp-` or `Bot User OAuth Access Token` beginning with `xoxb-`
+
+#### Add apps
+
+1. click `Details` on the channel which you want to post
+2. click `Add apps` on `More`
+3. choose your app
+
+### (Advanced) Environment Variables
+
+Some settings can be given by the following environment variables.
+
+```
+NOTIFY_SLACK_WEBHOOK_URL
+NOTIFY_SLACK_TOKEN
+NOTIFY_SLACK_CHANNEL
+NOTIFY_SLACK_SNIPPET_CHANNEL
+NOTIFY_SLACK_USERNAME
+NOTIFY_SLACK_ICON_EMOJI
+```
+
+It will be useful if you want to use it on a container. If you use it, you don't need a configuration file anymore.
 
 
-### 使用データの取得元
+## Release
 
-- 青空文庫 http://www.aozora.gr.jp/
-- なんちゃって個人情報 http://kazina.com/dummy/
-- いらすとや http://www.irasutoya.com/
-- pixabay https://pixabay.com/
+When you execute the following command and give a tag, it will be released via GitHub Actions.
+
+``` sh
+git tag v0.3.0
+git push origin v0.3.0
+```

@@ -5,7 +5,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 echo 'Restarting Go...'
 cd $DIR/webapp/go/
-go build -o isubata
+make
 sudo systemctl stop isubata.golang.service
 cd $DIR
 sudo systemctl restart isubata.golang.service

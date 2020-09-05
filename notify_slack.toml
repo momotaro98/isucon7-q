@@ -1,0 +1,8 @@
+[slack]
+url = "hhttps://hooks.slack.com/services/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"
+# token = "xoxp-1343896839345-1316527806151-1331362592658-04be2aa0ec11ce1bcdf13d12e9eff697"
+token = "xoxb-1343896839345-1337549112116-ImCOAAZB0DlxQIWgRBKd85bF"
+channel = "#notify"
+username = "tester"
+icon_emoji = ":rocket:"
+interval = "1s"

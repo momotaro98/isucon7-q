@@ -25,6 +25,13 @@ socket		= /var/run/mysqld/mysqld.sock
 nice		= 0
 
 [mysqld]
+
+# For slow query
+slow_query_log=ON
+long_query_time = 0
+slow_query_log_file = /tmp/mysql-slow.sql
+
+
 #
 # * Basic Settings
 #
