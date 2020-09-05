@@ -393,6 +393,33 @@ func jsonifyMessage(m Message) (map[string]interface{}, error) {
 	return r, nil
 }
 
+func getUsersIn(q sqlx.Queryer, messages []Message) (userSimples map[int64]User, err error) {
+	userIDs := make([]int64, 0, len(messages))
+	for _, m := range messages {
+		userIDs = append(userIDs, m.UserID)
+	}
+
+	userSimples = make(map[int64]User)
+	inQuery, inArgs, err := sqlx.In("SELECT id, name, display_name, avatar_icon FROM `users` WHERE `id` IN (?)", userIDs)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.Queryx(inQuery, inArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var user User
+		err = rows.StructScan(&user)
+		if err != nil {
+			return nil, err
+		}
+		userSimples[user.ID] = user
+	}
+	return userSimples, nil
+}
+
 func getMessage(c echo.Context) error {
 	userID := sessUserID(c)
 	if userID == 0 {
@@ -408,36 +435,33 @@ func getMessage(c echo.Context) error {
 		return err
 	}
 
-	//messages, err := queryMessages(chanID, lastID)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//response := make([]map[string]interface{}, 0)
-	//for i := len(messages) - 1; i >= 0; i-- {
-	//	m := messages[i]
-	//	r, err := jsonifyMessage(m)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	response = append(response, r)
-	//}
-
-	messages, err := queryMessagesWithMessage(chanID, lastID)
+	messages, err := queryMessages(chanID, lastID)
 	if err != nil {
 		return err
 	}
+
+	//users := make([]int64, 0, len(messages))
+	//for _, m := range messages {
+	//	users = append(users, m.UserID)
+	//}
+
+	users, err := getUsersIn(db, messages)
+	if err != nil {
+		return err
+	}
+
+	// ikeda ボツ
+	//messages, err := queryMessagesWithMessage(chanID, lastID)
+	//if err != nil {
+	//	return err
+	//}
 
 	response := make([]map[string]interface{}, 0)
 
 	for i := len(messages) - 1; i >= 0; i-- {
 		r := make(map[string]interface{})
-		r["id"] = messages[i].MessageID
-		r["user"] = User{
-			Name:        messages[i].Name,
-			DisplayName: messages[i].DisplayName,
-			AvatarIcon:  messages[i].AvatarIcon,
-		}
+		r["id"] = messages[i].ID
+		r["user"] = users[messages[i].UserID]
 		r["date"] = messages[i].CreatedAt.Format("2006/01/02 15:04:05")
 		r["content"] = messages[i].Content
 
@@ -448,7 +472,7 @@ func getMessage(c echo.Context) error {
 		_, err := db.Exec("INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)"+
 			" VALUES (?, ?, ?, NOW(), NOW())"+
 			" ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()",
-			userID, chanID, messages[0].MessageID, messages[0].MessageID)
+			userID, chanID, messages[0].ID, messages[0].ID)
 		if err != nil {
 			return err
 		}
