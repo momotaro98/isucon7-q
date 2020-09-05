@@ -602,13 +602,13 @@ func fetchUnread(c echo.Context) error {
 	//if err != nil {
 	//	return err
 	//}
-	//log.Println("CountMap", cmcMap)
+	log.Println("CountMap in fetchUnread:", cmcMap)
 
 	userUnreadMap, err := queryChanMessages(userID)
 	if err != nil {
 		return err
 	}
-	log.Println("after queryChanMessages", userUnreadMap)
+	log.Println("after queryChanMessages in fetchUnread:", userUnreadMap)
 
 	resp := []map[string]interface{}{}
 
