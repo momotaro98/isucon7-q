@@ -430,16 +430,16 @@ func getMessage(c echo.Context) error {
 
 	response := make([]map[string]interface{}, 0)
 
-	for _, m := range messages {
+	for i := len(messages) - 1; i >= 0; i-- {
 		r := make(map[string]interface{})
-		r["id"] = m.MessageID
+		r["id"] = messages[i].MessageID
 		r["user"] = User{
-			Name:        m.Name,
-			DisplayName: m.DisplayName,
-			AvatarIcon:  m.AvatarIcon,
+			Name:        messages[i].Name,
+			DisplayName: messages[i].DisplayName,
+			AvatarIcon:  messages[i].AvatarIcon,
 		}
-		r["date"] = m.CreatedAt.Format("2006/01/02 15:04:05")
-		r["content"] = m.Content
+		r["date"] = messages[i].CreatedAt.Format("2006/01/02 15:04:05")
+		r["content"] = messages[i].Content
 
 		response = append(response, r)
 	}
