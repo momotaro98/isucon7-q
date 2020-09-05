@@ -598,16 +598,19 @@ func fetchUnread(c echo.Context) error {
 
 	// time.Sleep(time.Second)
 
-	//CMC.Lock()
-	//channels := CMC.CountMap
-	//CMC.Unlock()
-	//log.Println("CountMap in fetchUnread:", cmcMap)
+	CMC.Lock()
+	cmcChannels := CMC.CountMap
+	CMC.Unlock()
 
 	channels, err := GetChannelIDCount()
 	//channels, err := queryChannels()
 	if err != nil {
 		return err
 	}
+
+	log.Println("cmcChannels:", cmcChannels[1], "channels:", channels[1])
+	log.Println("cmcChannels:", cmcChannels[2], "channels:", channels[2])
+	log.Println("cmcChannels:", cmcChannels[3], "channels:", channels[3])
 
 	userUnreadMap, err := queryChanMessages(userID)
 	if err != nil {
