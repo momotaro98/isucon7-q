@@ -126,14 +126,6 @@ func init() {
 	db.SetMaxOpenConns(20)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	if c, err := GetChannelIDCount(); err != nil {
-		panic(err)
-	} else {
-		CMC.CountMap = c
-	}
-
-	log.Println("my log. CMD.CountMap:", CMC.CountMap)
-
 	log.Printf("Succeeded to connect db.")
 }
 
@@ -289,6 +281,15 @@ func getInitialize(c echo.Context) error {
 	db.MustExec("DELETE FROM channel WHERE id > 10")
 	db.MustExec("DELETE FROM message WHERE id > 10000")
 	db.MustExec("DELETE FROM haveread")
+
+	if c, err := GetChannelIDCount(); err != nil {
+		panic(err)
+	} else {
+		CMC.CountMap = c
+	}
+
+	log.Println("my log. CMD.CountMap:", CMC.CountMap)
+
 	return c.String(204, "")
 }
 
@@ -610,7 +611,7 @@ func fetchUnread(c echo.Context) error {
 
 	for key, val := range cmcChannels {
 		if val != channels[key] {
-			fmt.Println("key:", "cmc val:", val, "channels val:", channels[key])
+			fmt.Println("key:", key, "cmc val:", val, "channels val:", channels[key])
 		}
 	}
 
