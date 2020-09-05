@@ -535,20 +535,20 @@ func getMessage(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-//type ChanCount struct {
-//	ChannelID int64 `db:"channel_id"`
-//	Count     int64 `db:"cnt"`
-//}
+type ChanCount struct {
+	ChannelID int64 `db:"channel_id"`
+	Count     int64 `db:"cnt"`
+}
 
-//func queryChannels() (map[int64]int64, error) {
-//	chanCounts := []ChanCount{}
-//	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
-//	ret := make(map[int64]int64)
-//	for _, c := range chanCounts {
-//		ret[c.ChannelID] = c.Count
-//	}
-//	return ret, err
-//}
+func queryChannels() (map[int64]int64, error) {
+	chanCounts := []ChanCount{}
+	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
+	ret := make(map[int64]int64)
+	for _, c := range chanCounts {
+		ret[c.ChannelID] = c.Count
+	}
+	return ret, err
+}
 
 func queryHaveRead(userID, chID int64) (int64, error) {
 	type HaveRead struct {
@@ -595,14 +595,16 @@ func fetchUnread(c echo.Context) error {
 
 	// time.Sleep(time.Second)
 
-	CMC.Lock()
-	cmcMap := CMC.CountMap
-	CMC.Unlock()
+	//CMC.Lock()
+	//channels := CMC.CountMap
+	//CMC.Unlock()
+	//log.Println("CountMap in fetchUnread:", cmcMap)
+
+	channels, err := GetChannelIDCount()
 	//channels, err := queryChannels()
-	//if err != nil {
-	//	return err
-	//}
-	log.Println("CountMap in fetchUnread:", cmcMap)
+	if err != nil {
+		return err
+	}
 
 	userUnreadMap, err := queryChanMessages(userID)
 	if err != nil {
@@ -612,7 +614,8 @@ func fetchUnread(c echo.Context) error {
 
 	resp := []map[string]interface{}{}
 
-	for chID, count := range cmcMap {
+	//for chID, count := range cmcMap {
+	for chID, count := range channels {
 		//lastID, err := queryHaveRead(userID, chID)
 		//if err != nil {
 		//	return err
