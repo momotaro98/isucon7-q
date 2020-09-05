@@ -412,10 +412,19 @@ func getMessage(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-func queryChannels() ([]int64, error) {
-	res := []int64{}
-	err := db.Select(&res, "SELECT id FROM channel")
-	return res, err
+type ChanCount struct {
+	ChannelID int64 `db:"channel_id"`
+	Count     int64 `db:"cnt"`
+}
+
+func queryChannels() (map[int64]int64, error) {
+	chanCounts := []ChanCount{}
+	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
+	ret := make(map[int64]int64)
+	for _, c := range chanCounts {
+		ret[c.ChannelID] = c.Count
+	}
+	return ret, err
 }
 
 func queryHaveRead(userID, chID int64) (int64, error) {
@@ -439,6 +448,22 @@ func queryHaveRead(userID, chID int64) (int64, error) {
 	return h.MessageID, nil
 }
 
+type UserUnreadMessageID struct {
+	ChannelID int64 `db:"channel_id"`
+	MessageID int64 `db:"message_id"`
+}
+
+func queryChanMessages(userID int64) (map[int64]int64, error) {
+	ret := make(map[int64]int64)
+	msgs := []UserUnreadMessageID{}
+	err := db.Select(&msgs, "select channel_id, message_id from haveread where user_id = ?",
+		userID)
+	for _, m := range msgs {
+		ret[m.ChannelID] = m.MessageID
+	}
+	return ret, err
+}
+
 func fetchUnread(c echo.Context) error {
 	userID := sessUserID(c)
 	if userID == 0 {
@@ -451,13 +476,26 @@ func fetchUnread(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	log.Println("after queryChannels", channels)
+
+	userUnreadMap, err := queryChanMessages(userID)
+	if err != nil {
+		return err
+	}
+	log.Println("after queryChanMessages", userUnreadMap)
 
 	resp := []map[string]interface{}{}
 
-	for _, chID := range channels {
-		lastID, err := queryHaveRead(userID, chID)
-		if err != nil {
-			return err
+	for chID, count := range channels {
+		//lastID, err := queryHaveRead(userID, chID)
+		//if err != nil {
+		//	return err
+		//}
+		var lastID int64
+		if lID, ok := userUnreadMap[chID]; ok {
+			lastID = lID
+		} else {
+			lastID = 0
 		}
 
 		var cnt int64
@@ -466,9 +504,14 @@ func fetchUnread(c echo.Context) error {
 				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
 				chID, lastID)
 		} else {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
-				chID)
+			//err = db.Get(&cnt,
+			//	"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
+			//	chID)
+			if count == 1 {
+				cnt = 0
+			} else {
+				cnt = count
+			}
 		}
 		if err != nil {
 			return err
