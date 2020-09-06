@@ -1,15 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/gif"
-	"image/jpeg"
-	"image/png"
 	"log"
 	"os"
-	"strings"
 	"time"
 	"database/sql"
 
@@ -61,18 +55,7 @@ func init() {
 	log.Printf("Succeeded to connect db.")
 }
 
-type Image struct {
-	Name  string `db:"name"`
-	Image []byte `db:"name"`
-}
-
 func main() {
-	//dest := []Image{}
-	// err := db.Select(&dest, "SELECT name, data FROM image")
-	// if err != nil {
-	// 	panic(err)
-	// }
-
 	for i:= 0; i < 1500; i++ {
 		var name string
 		var data []byte
@@ -84,36 +67,16 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		img, _, err := image.Decode(bytes.NewReader(data))
+		out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
 		if err != nil {
-			fmt.Println("image.Decode error:", err)
-			continue
+			fmt.Println("write error:", err)
 		}
-		switch true {
-		case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
-			err := jpeg.Encode(out, img, nil)
-			if err != nil {
-				fmt.Println("jpg error:", err)
-			}
-			out.Close()
-		case strings.HasSuffix(name, ".gif"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
-			err := gif.Encode(out, img, nil)
-			if err != nil {
-				fmt.Println("gif error:", err)
-			}
-			out.Close()
-		case strings.HasSuffix(name, ".png"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
-			err := png.Encode(out, img)
-			if err != nil {
-				fmt.Println("png error:", err)
-			}
-			out.Close()
-		default:
-			log.Fatalln("unknown format")
+		_, err = out.Write(data)
+		if err != nil {
+			fmt.Println("write error:", err)
 		}
+
+		out.Close()
 	}
 
 }
