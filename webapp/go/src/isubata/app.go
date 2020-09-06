@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/go-redis/redis"
+
 	crand "crypto/rand"
 	"crypto/sha1"
 	"database/sql"
@@ -87,6 +89,10 @@ var (
 	CMC ChannelMessageCount
 )
 
+var (
+	redisClient *redis.Client
+)
+
 func init() {
 	seedBuf := make([]byte, 8)
 	crand.Read(seedBuf)
@@ -127,6 +133,14 @@ func init() {
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	log.Printf("Succeeded to connect db.")
+
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	log.Printf("Succeeded to connect Redis.")
 }
 
 type User struct {
@@ -271,6 +285,19 @@ func register(name, password string) (int64, error) {
 		return 0, err
 	}
 	return res.LastInsertId()
+
+	//userID, err := res.LastInsertId()
+	//if err != nil {
+	//	return 0, nil
+	//}
+
+	//for channelID, _ := range CMC.CountMap {
+	//	if err := HaveReadHSET(userID, channelID, messages[0].ID); err != nil {
+	//		return err
+	//	}
+	//}
+
+	//return userID, nil
 }
 
 // request handlers
@@ -282,6 +309,7 @@ func getInitialize(c echo.Context) error {
 	db.MustExec("DELETE FROM message WHERE id > 10000")
 	db.MustExec("DELETE FROM haveread")
 
+	// In-memory cache for message count
 	if c, err := GetChannelIDCount(); err != nil {
 		panic(err)
 	} else {
@@ -294,6 +322,7 @@ func getInitialize(c echo.Context) error {
 		fmt.Println(err)
 	}
 
+	// Load image byte to files
 	for i := 0; i < 1200; i++ {
 		var name string
 		var data []byte
@@ -317,7 +346,43 @@ func getInitialize(c echo.Context) error {
 		out.Close()
 	}
 
+	// Load unread to Redis
+	if err := loadHaveRead(); err != nil {
+		log.Fatalln(err)
+	}
+
 	return c.String(204, "")
+}
+
+type HaveRead struct {
+	UserID    int64 `db:"user_id"`
+	ChannelID int64 `db:"channel_id"`
+	MessageID int64 `db:"message_id"`
+}
+
+func HaveReadHSET(userID, channelID, messageID int64) error {
+	err := redisClient.HSet(
+		strconv.FormatInt(userID, 10),          // key
+		strconv.FormatInt(channelID, 10),       // field
+		strconv.FormatInt(messageID, 10)).Err() // val
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadHaveRead() error {
+	dest := []HaveRead{}
+	err := db.Select(&dest, "select user_id, channel_id, message_id from haveread")
+	if err != nil {
+		return err
+	}
+	for _, d := range dest {
+		if err := HaveReadHSET(d.UserID, d.ChannelID, d.MessageID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getIndex(c echo.Context) error {
@@ -554,11 +619,15 @@ func getMessage(c echo.Context) error {
 	}
 
 	if len(messages) > 0 {
-		_, err := db.Exec("INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)"+
-			" VALUES (?, ?, ?, NOW(), NOW())"+
-			" ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()",
-			userID, chanID, messages[0].ID, messages[0].ID)
-		if err != nil {
+		//_, err := db.Exec("INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)"+
+		//	" VALUES (?, ?, ?, NOW(), NOW())"+
+		//	" ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()",
+		//	userID, chanID, messages[0].ID, messages[0].ID)
+		//if err != nil {
+		//	return err
+		//}
+
+		if err := HaveReadHSET(userID, chanID, messages[0].ID); err != nil {
 			return err
 		}
 	}
@@ -566,55 +635,81 @@ func getMessage(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-type ChanCount struct {
-	ChannelID int64 `db:"channel_id"`
-	Count     int64 `db:"cnt"`
-}
-
-func queryChannels() (map[int64]int64, error) {
-	chanCounts := []ChanCount{}
-	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
-	ret := make(map[int64]int64)
-	for _, c := range chanCounts {
-		ret[c.ChannelID] = c.Count
-	}
-	return ret, err
-}
-
-func queryHaveRead(userID, chID int64) (int64, error) {
-	type HaveRead struct {
-		UserID    int64     `db:"user_id"`
-		ChannelID int64     `db:"channel_id"`
-		MessageID int64     `db:"message_id"`
-		UpdatedAt time.Time `db:"updated_at"`
-		CreatedAt time.Time `db:"created_at"`
-	}
-	h := HaveRead{}
-
-	err := db.Get(&h, "SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?",
-		userID, chID)
-
-	if err == sql.ErrNoRows {
-		return 0, nil
-	} else if err != nil {
-		return 0, err
-	}
-	return h.MessageID, nil
-}
+//type ChanCount struct {
+//	ChannelID int64 `db:"channel_id"`
+//	Count     int64 `db:"cnt"`
+//}
+//
+//func queryChannels() (map[int64]int64, error) {
+//	chanCounts := []ChanCount{}
+//	err := db.Select(&chanCounts, "select c.id as channel_id, count(*) as cnt from channel as c left join message as m on c.id = m.channel_id group by c.id")
+//	ret := make(map[int64]int64)
+//	for _, c := range chanCounts {
+//		ret[c.ChannelID] = c.Count
+//	}
+//	return ret, err
+//}
+//
+//func queryHaveRead(userID, chID int64) (int64, error) {
+//	type HaveRead struct {
+//		UserID    int64     `db:"user_id"`
+//		ChannelID int64     `db:"channel_id"`
+//		MessageID int64     `db:"message_id"`
+//		UpdatedAt time.Time `db:"updated_at"`
+//		CreatedAt time.Time `db:"created_at"`
+//	}
+//	h := HaveRead{}
+//
+//	err := db.Get(&h, "SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?",
+//		userID, chID)
+//
+//	if err == sql.ErrNoRows {
+//		return 0, nil
+//	} else if err != nil {
+//		return 0, err
+//	}
+//	return h.MessageID, nil
+//}
 
 type UserUnreadMessageID struct {
 	ChannelID int64 `db:"channel_id"`
 	MessageID int64 `db:"message_id"`
 }
 
-func queryChanMessages(userID int64) (map[int64]int64, error) {
-	ret := make(map[int64]int64)
-	msgs := []UserUnreadMessageID{}
-	err := db.Select(&msgs, "select channel_id, message_id from haveread where user_id = ?",
-		userID)
-	for _, m := range msgs {
-		ret[m.ChannelID] = m.MessageID
+//func queryChanMessages(userID int64) (map[int64]int64, error) {
+//	ret := make(map[int64]int64)
+//	msgs := []UserUnreadMessageID{}
+//	err := db.Select(&msgs, "select channel_id, message_id from haveread where user_id = ?",
+//		userID)
+//	for _, m := range msgs {
+//		ret[m.ChannelID] = m.MessageID
+//	}
+//	return ret, err
+//}
+
+func queryChanMessagesFromRedis(userID int64) (map[int64]int64, error) {
+	key := strconv.FormatInt(userID, 10)
+	// HGetAll
+	hgetallVal, err := redisClient.HGetAll(key).Result()
+	if err != nil {
+		return nil, err
 	}
+
+	ret := make(map[int64]int64)
+	for field, val := range hgetallVal {
+		channelID, err := strconv.ParseInt(field, 10, 64)
+		if err != nil {
+			log.Println("bad error! in Redis")
+			return nil, err
+		}
+		messageID, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			log.Println("bad error! in Redis")
+			return nil, err
+		}
+		ret[channelID] = messageID
+	}
+
 	return ret, err
 }
 
@@ -642,7 +737,8 @@ func fetchUnread(c echo.Context) error {
 	//	}
 	//}
 
-	userUnreadMap, err := queryChanMessages(userID)
+	//userUnreadMap, err := queryChanMessages(userID) // [old] DB
+	userUnreadMap, err := queryChanMessagesFromRedis(userID)
 	if err != nil {
 		return err
 	}
