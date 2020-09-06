@@ -158,8 +158,8 @@ func addMessage(channelID, userID int64, content string) (int64, error) {
 		return 0, err
 	}
 	CMC.Lock()
-	defer CMC.Unlock()
 	CMC.CountMap[channelID]++
+	CMC.Unlock()
 	return res.LastInsertId()
 }
 
@@ -599,10 +599,8 @@ func fetchUnread(c echo.Context) error {
 
 	// time.Sleep(time.Second)
 
-	CMC.Lock()
 	//cmcChannels := CMC.CountMap
 	channels := CMC.CountMap
-	CMC.Unlock()
 
 	//channels, err := GetChannelIDCount()
 	//channels, err := queryChannels()
@@ -686,13 +684,11 @@ func getHistory(c echo.Context) error {
 	const N = 20
 	var cnt int64
 
-	CMC.Lock()
 	cnt, ok := CMC.CountMap[chID]
 	if !ok {
 		CMC.Unlock()
 		return fmt.Errorf("my error!! no map id in getHistory")
 	}
-	CMC.Unlock()
 	//err = db.Get(&cnt, "SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?", chID)
 	//if err != nil {
 	//	return err
@@ -810,8 +806,8 @@ func postAddChannel(c echo.Context) error {
 	lastID, _ := res.LastInsertId()
 
 	CMC.Lock()
-	defer CMC.Unlock()
 	CMC.CountMap[lastID] = 0
+	CMC.Unlock()
 
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/channel/%v", lastID))
