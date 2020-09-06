@@ -347,7 +347,7 @@ func getInitialize(c echo.Context) error {
 	}
 
 	// Load unread to Redis
-	if err := loadHaveRead(); err != nil {
+	if err := flushAndLoadRedis(); err != nil {
 		log.Fatalln(err)
 	}
 
@@ -371,7 +371,9 @@ func HaveReadHSET(userID, channelID, messageID int64) error {
 	return nil
 }
 
-func loadHaveRead() error {
+func flushAndLoadRedis() error {
+	redisClient.FlushAll()
+
 	dest := []HaveRead{}
 	err := db.Select(&dest, "select user_id, channel_id, message_id from haveread")
 	if err != nil {
