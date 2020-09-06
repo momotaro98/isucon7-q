@@ -11,8 +11,12 @@ import (
 	"os"
 	"strings"
 	"time"
+	"database/sql"
 
 	"github.com/jmoiron/sqlx"
+
+	_ "github.com/go-sql-driver/mysql"
+
 )
 
 var (
@@ -33,7 +37,7 @@ func init() {
 		db_user = "isucon"
 	}
 	db_password := os.Getenv("ISUBATA_DB_PASSWORD")
-	if db_password != "" {
+	if db_password == "" {
 		db_password = ":" + "isucon"
 	}
 
@@ -63,34 +67,45 @@ type Image struct {
 }
 
 func main() {
-	dest := []Image{}
-	err := db.Select(&dest, "SELECT name, data FROM image")
-	if err != nil {
-		panic(err)
-	}
+	//dest := []Image{}
+	// err := db.Select(&dest, "SELECT name, data FROM image")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	for _, d := range dest {
-		img, _, err := image.Decode(bytes.NewReader(d.Image))
+	for i:= 0; i < 1500; i++ {
+		var name string
+		var data []byte
+		fmt.Println(db)
+		err := db.QueryRow("SELECT name, data FROM image WHERE id = ?", i).Scan(&name, &data)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		img, _, err := image.Decode(bytes.NewReader(data))
 		if err != nil {
 			log.Fatalln(err)
 		}
 		switch true {
-		case strings.HasSuffix(d.Name, ".jpg"), strings.HasSuffix(d.Name, ".jpeg"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", d.Name))
+		case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", name))
 			err := jpeg.Encode(out, img, nil)
 			if err != nil {
 				log.Fatalln(err)
 			}
 			out.Close()
-		case strings.HasSuffix(d.Name, ".png"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", d.Name))
+		case strings.HasSuffix(name, ".png"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", name))
 			err := png.Encode(out, img)
 			if err != nil {
 				log.Fatalln(err)
 			}
 			out.Close()
-		case strings.HasSuffix(d.Name, ".gif"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", d.Name))
+		case strings.HasSuffix(name, ".gif"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", name))
 			err := gif.Encode(out, img, nil)
 			if err != nil {
 				log.Fatalln(err)
