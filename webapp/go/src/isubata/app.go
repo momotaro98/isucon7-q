@@ -741,7 +741,6 @@ func fetchUnread(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Println("after queryChanMessages in fetchUnread:", userUnreadMap)
 
 	resp := []map[string]interface{}{}
 
