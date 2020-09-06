@@ -1,17 +1,12 @@
 package main
 
 import (
-	"bytes"
 	crand "crypto/rand"
 	"crypto/sha1"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"html/template"
-	"image"
-	"image/gif"
-	"image/jpeg"
-	"image/png"
 	"io"
 	"io/ioutil"
 	"log"
@@ -294,6 +289,33 @@ func getInitialize(c echo.Context) error {
 	}
 
 	log.Println("my log. CMD.CountMap:", CMC.CountMap)
+
+	if err := os.Mkdir("", 0777); err != nil {
+		fmt.Println(err)
+	}
+
+	for i := 0; i < 1200; i++ {
+		var name string
+		var data []byte
+		err := db.QueryRow("SELECT name, data FROM image WHERE id = ?", i).Scan(&name, &data)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
+		if err != nil {
+			fmt.Println("write error:", err)
+		}
+		_, err = out.Write(data)
+		if err != nil {
+			fmt.Println("write error:", err)
+		}
+
+		out.Close()
+	}
 
 	return c.String(204, "")
 }
@@ -866,35 +888,15 @@ func postProfile(c echo.Context) error {
 		data := avatarData
 		name := avatarName
 
-		img, _, err := image.Decode(bytes.NewReader(data))
+		out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
 		if err != nil {
 			return err
 		}
-		switch true {
-		case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
-			err := jpeg.Encode(out, img, nil)
-			if err != nil {
-				return err
-			}
-			out.Close()
-		case strings.HasSuffix(name, ".png"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
-			err := png.Encode(out, img)
-			if err != nil {
-				return err
-			}
-			out.Close()
-		case strings.HasSuffix(name, ".gif"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
-			err := gif.Encode(out, img, nil)
-			if err != nil {
-				return err
-			}
-			out.Close()
-		default:
-			log.Fatalln("unknown format")
+		_, err = out.Write(data)
+		if err != nil {
+			return err
 		}
+		out.Close()
 
 		_, err = db.Exec("UPDATE user SET avatar_icon = ? WHERE id = ?", avatarName, self.ID)
 		if err != nil {
