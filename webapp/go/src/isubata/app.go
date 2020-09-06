@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
 	crand "crypto/rand"
 	"crypto/sha1"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"html/template"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"io/ioutil"
 	"log"
@@ -854,10 +859,43 @@ func postProfile(c echo.Context) error {
 	}
 
 	if avatarName != "" && len(avatarData) > 0 {
-		_, err := db.Exec("INSERT INTO image (name, data) VALUES (?, ?)", avatarName, avatarData)
+		//_, err := db.Exec("INSERT INTO image (name, data) VALUES (?, ?)", avatarName, avatarData)
+		//if err != nil {
+		//	return err
+		//}
+		data := avatarData
+		name := avatarName
+
+		img, _, err := image.Decode(bytes.NewReader(data))
 		if err != nil {
 			return err
 		}
+		switch true {
+		case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
+			err := jpeg.Encode(out, img, nil)
+			if err != nil {
+				return err
+			}
+			out.Close()
+		case strings.HasSuffix(name, ".png"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
+			err := png.Encode(out, img)
+			if err != nil {
+				return err
+			}
+			out.Close()
+		case strings.HasSuffix(name, ".gif"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
+			err := gif.Encode(out, img, nil)
+			if err != nil {
+				return err
+			}
+			out.Close()
+		default:
+			log.Fatalln("unknown format")
+		}
+
 		_, err = db.Exec("UPDATE user SET avatar_icon = ? WHERE id = ?", avatarName, self.ID)
 		if err != nil {
 			return err
@@ -952,7 +990,7 @@ func main() {
 
 	e.GET("add_channel", getAddChannel)
 	e.POST("add_channel", postAddChannel)
-	e.GET("/icons/:file_name", getIcon)
+	// e.GET("/icons/:file_name", getIcon)
 
 	e.Start(":5000")
 }
