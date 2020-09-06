@@ -809,7 +809,6 @@ func getHistory(c echo.Context) error {
 
 	cnt, ok := CMC.CountMap[chID]
 	if !ok {
-		CMC.Unlock()
 		return fmt.Errorf("my error!! no map id in getHistory")
 	}
 	//err = db.Get(&cnt, "SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?", chID)
@@ -833,12 +832,27 @@ func getHistory(c echo.Context) error {
 		return err
 	}
 
-	mjson := make([]map[string]interface{}, 0)
-	for i := len(messages) - 1; i >= 0; i-- {
-		r, err := jsonifyMessage(messages[i])
+	users := make(map[int64]User)
+	if len(messages) > 0 {
+		users, err = getUsersIn(db, messages)
 		if err != nil {
 			return err
 		}
+	}
+
+	mjson := make([]map[string]interface{}, 0)
+	for i := len(messages) - 1; i >= 0; i-- {
+		r := make(map[string]interface{})
+		r["id"] = messages[i].ID
+		r["user"] = users[messages[i].UserID]
+		r["date"] = messages[i].CreatedAt.Format("2006/01/02 15:04:05")
+		r["content"] = messages[i].Content
+
+		//r, err := jsonifyMessage(messages[i])
+		//if err != nil {
+		//	return err
+		//}
+
 		mjson = append(mjson, r)
 	}
 
