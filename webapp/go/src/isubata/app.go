@@ -26,9 +26,6 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/middleware"
-
-	_ "net/http/pprof"
-	"runtime"
 )
 
 const (
@@ -1065,12 +1062,6 @@ func tRange(a, b int64) []int64 {
 }
 
 func main() {
-	runtime.SetBlockProfileRate(1)
-	runtime.SetMutexProfileFraction(1)
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	e := echo.New()
 	funcs := template.FuncMap{
 		"add":    tAdd,
