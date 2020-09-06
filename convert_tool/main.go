@@ -76,7 +76,6 @@ func main() {
 	for i:= 0; i < 1500; i++ {
 		var name string
 		var data []byte
-		fmt.Println(db)
 		err := db.QueryRow("SELECT name, data FROM image WHERE id = ?", i).Scan(&name, &data)
 		if err == sql.ErrNoRows {
 			continue
@@ -87,28 +86,29 @@ func main() {
 
 		img, _, err := image.Decode(bytes.NewReader(data))
 		if err != nil {
-			log.Fatalln(err)
+			fmt.Println("image.Decode error:", err)
+			continue
 		}
 		switch true {
 		case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", name))
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
 			err := jpeg.Encode(out, img, nil)
 			if err != nil {
-				log.Fatalln(err)
-			}
-			out.Close()
-		case strings.HasSuffix(name, ".png"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", name))
-			err := png.Encode(out, img)
-			if err != nil {
-				log.Fatalln(err)
+				fmt.Println("jpg error:", err)
 			}
 			out.Close()
 		case strings.HasSuffix(name, ".gif"):
-			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/images/%s", name))
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
 			err := gif.Encode(out, img, nil)
 			if err != nil {
-				log.Fatalln(err)
+				fmt.Println("gif error:", err)
+			}
+			out.Close()
+		case strings.HasSuffix(name, ".png"):
+			out, _ := os.Create(fmt.Sprintf("/home/isucon/isubata/webapp/public/icons/%s", name))
+			err := png.Encode(out, img)
+			if err != nil {
+				fmt.Println("png error:", err)
 			}
 			out.Close()
 		default:
